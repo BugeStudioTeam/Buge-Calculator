@@ -19,8 +19,7 @@
 
 <div style="overflow-x: auto; white-space: nowrap; padding: 10px 0;">
 
-<img src="https://raw.githubusercontent.com/BugeStudioTeam/Buge-Calculator/main/images/screenshots/1.png" alt="Buge Calculator 1" width="200"/>
-<img src="https://raw.githubusercontent.com/BugeStudioTeam/Buge-Calculator/main/images/screenshots/2.png" alt="Buge Calculator 2" width="200"/>
+NONE NOW
 
 </div>
 
@@ -150,9 +149,9 @@
 
 <a href="https://www.star-history.com/?repos=BugeStudioTeam%2FBuge-Calculator&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&theme=dark&legend=top-left&sealed_token=HMBM-OIV3nqbNKnol4ZFUeHMZ5dQ7LAGMUdAe8X2Z07IMenqQ-XEclk6E7LL3VbT1z7PJhVBiYETyuZxn1ZRvyRZsX2VexYUfh1DVPJ-PMQyH94NgQeMzg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&legend=top-left&sealed_token=HMBM-OIV3nqbNKnol4ZFUeHMZ5dQ7LAGMUdAe8X2Z07IMenqQ-XEclk6E7LL3VbT1z7PJhVBiYETyuZxn1ZRvyRZsX2VexYUfh1DVPJ-PMQyH94NgQeMzg" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=BugeStudioTeam/Buge-Calculator&type=date&legend=top-left&sealed_token=HMBM-OIV3nqbNKnol4ZFUeHMZ5dQ7LAGMUdAe8X2Z07IMenqQ-XEclk6E7LL3VbT1z7PJhVBiYETyuZxn1ZRvyRZsX2VexYUfh1DVPJ-PMQyH94NgQeMzg" />
  </picture>
 </a>
 
