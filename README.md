@@ -7,6 +7,7 @@
 <p align="center">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Android/android2.svg">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Kotlin/kotlin2.svg">
+  <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Python/python3.svg">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Github/github3.svg">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/LicenceGPLv3/licencegplv32.svg">
 </p>
