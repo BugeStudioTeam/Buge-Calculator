@@ -278,8 +278,8 @@ private fun CalculatorScreen(
         action()
     }
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val compact = maxHeight < 580.dp
-        val expanded = maxHeight >= 720.dp
+        val compact = maxHeight < 580.dp || maxWidth < 360.dp
+        val expanded = maxHeight >= 720.dp && maxWidth >= 600.dp
         // On a phone the keypad has priority. The display grows only as vertical room becomes available.
         val displayHeight: Dp = when {
             maxHeight < 580.dp -> 76.dp
@@ -307,7 +307,7 @@ private fun CalculatorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 8.dp),
+                    .padding(horizontal = if (compact) 8.dp else 16.dp, vertical = if (compact) 4.dp else 8.dp),
                 compact = compact,
                 expanded = expanded,
                 scientific = state.mode == CalculatorMode.SCIENTIFIC,
@@ -449,10 +449,11 @@ private fun ScientificKeyGrid(
                     ) {
                         Text(
                             text = label,
-                            fontSize = if (compact) 10.sp else 12.sp,
+                            fontSize = if (compact) 9.sp else 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -497,7 +498,10 @@ private fun Keypad(
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)
         ) {
             rows.forEach { row ->
-                Row(modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)
+            ) {
                     row.forEach { key ->
                         CalculatorKey(key, Modifier.weight(if (row.size == 3) 1.333f else 1f), compact, expanded)
                     }
@@ -548,13 +552,23 @@ private fun CalculatorKey(
             .clip(RoundedCornerShape(50))
             .background(containerColor)
             .combinedClickable(onClick = spec.action, onLongClick = spec.longAction)
-            .padding(ButtonDefaults.ContentPadding),
+            .padding(
+                horizontal = if (compact) 4.dp else 12.dp,
+                vertical = if (compact) 4.dp else 8.dp
+            ),
         contentAlignment = Alignment.Center
     ) {
         if (spec.icon != null) {
             Icon(spec.icon, contentDescription = spec.label, modifier = Modifier.size(if (expanded) 28.dp else 24.dp), tint = contentColor)
         } else {
-            Text(spec.label, fontSize = if (expanded) 26.sp else if (compact) 18.sp else 21.sp, fontWeight = FontWeight.Medium, color = contentColor)
+            Text(
+                text = spec.label,
+                fontSize = if (expanded) 26.sp else if (compact) 16.sp else 21.sp,
+                fontWeight = FontWeight.Medium,
+                color = contentColor,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
