@@ -39,7 +39,7 @@ NONE NOW
 
 ---
 
-### 🎵 Scientific Calculator
+### 🧪 Scientific Calculator
 
 - Switch between **Basic** and **Scientific** keypad modes
 - Evaluate arithmetic, brackets, powers, roots, percentages, and factorials
