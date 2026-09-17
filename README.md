@@ -12,7 +12,7 @@
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/LicenceGPLv3/licencegplv32.svg">
 </p>
 
-**Buge Calculator** is a powerful, privacy-first Android scientific calculator built with **Kotlin**, **Jetpack Compose**, and **Material Design 3**. It combines precise expression evaluation, interactive function graphing, 3D formula surfaces, safe local mathematical Python, multilingual support, and a refined adaptive interface.
+**Buge Calculator** is a powerful, privacy-first Android scientific calculator built with **Kotlin**, **Jetpack Compose**, and **Material Design 3 Expressive**. It combines precise expression evaluation, interactive function graphing, 3D formula surfaces, safe local mathematical Python, multilingual support, and a refined adaptive interface.
 
 ---
 
