@@ -18,7 +18,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,6 +54,7 @@ fun PythonWorkbenchScreen(
             placeholder = { Text(strings.pythonCodeHint) },
             leadingIcon = { Icon(Icons.Filled.Code, null) },
             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            visualTransformation = PythonSyntaxVisualTransformation(MaterialTheme.colorScheme),
             minLines = 8,
             maxLines = 14
         )

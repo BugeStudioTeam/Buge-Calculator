@@ -23,8 +23,8 @@ android {
         applicationId = "com.buge.calculator"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.1.7"
+        versionCode = 12
+        versionName = "1.2.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -70,6 +70,8 @@ android {
 
 chaquopy {
     defaultConfig {
+        // Full CPython 3.12 runtime: imports and the complete Python grammar
+        // are executed by Chaquopy rather than a restricted expression parser.
         version = "3.12"
         buildPython("python3")
     }

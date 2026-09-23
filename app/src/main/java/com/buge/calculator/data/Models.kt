@@ -47,7 +47,7 @@ data class SurfaceSettings(
 )
 
 data class PythonWorkspace(
-    val code: String = "def f(x):\n    return sin(x) + x**2\n\nprint(f(2))",
+    val code: String = "import math\nimport statistics\n\nvalues = [1, 2, 3, 4, 5]\nmean = statistics.mean(values)\nprint(f'√81 = {math.sqrt(81)}')\nprint(f'mean = {mean}')",
     val output: String = "",
     val error: String? = null
 )
@@ -163,7 +163,7 @@ val EnglishStrings = BugeStrings(
     model3d = "3D Model", python = "Python", surfaceExpressionHint = "e.g. sin(sqrt(x^2+y^2))",
     surfaceHelp = "Formula surface", surfaceHelpDescription = "Write z = f(x, y), then drag to rotate and pinch to zoom.",
     resetCamera = "Reset camera", showMesh = "Mesh", pythonCode = "Python code", pythonCodeHint = "Write a mathematical function or calculation", runPython = "Run Python",
-    pythonResult = "Output", pythonHelp = "Local mathematical Python", pythonHelpDescription = "Runs safe mathematical Python code on this device. Imports, files and network access are disabled."
+    pythonResult = "Output", pythonHelp = "Full local Python 3.12", pythonHelpDescription = "Runs complete Python 3.12 locally through Chaquopy, including import, functions, classes, loops, exceptions and the standard library."
 )
 
 val ChineseStrings = BugeStrings(
@@ -183,7 +183,7 @@ val ChineseStrings = BugeStrings(
     model3d = "三维模型", python = "Python", surfaceExpressionHint = "例如 sin(sqrt(x^2+y^2))",
     surfaceHelp = "公式曲面", surfaceHelpDescription = "输入 z = f(x, y)，拖动旋转，双指缩放。",
     resetCamera = "重置视角", showMesh = "网格", pythonCode = "Python 代码", pythonCodeHint = "编写数学函数或计算", runPython = "运行 Python",
-    pythonResult = "输出", pythonHelp = "本地数学 Python", pythonHelpDescription = "在本设备运行安全的数学 Python 代码；导入、文件和网络访问均被禁用。"
+    pythonResult = "输出", pythonHelp = "完整本地 Python 3.12", pythonHelpDescription = "通过 Chaquopy 在本设备运行完整 Python 3.12，支持 import、函数、类、循环、异常和标准库。"
 )
 
 fun AppLanguage.strings(): BugeStrings = when (this) {

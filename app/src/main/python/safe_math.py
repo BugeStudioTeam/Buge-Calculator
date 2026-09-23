@@ -1,105 +1,71 @@
-import ast
+import contextlib
+import io
 import json
-import math
+import traceback
 
-MAX_CODE_LENGTH = 6000
-MAX_AST_NODES = 320
-MAX_OUTPUT_LENGTH = 4000
-
-SAFE_BUILTINS = {
-    "abs": abs,
-    "min": min,
-    "max": max,
-    "round": round,
-    "sum": sum,
-    "pow": pow,
-}
-SAFE_NAMES = {
-    **SAFE_BUILTINS,
-    "print": print,
-    "pi": math.pi,
-    "e": math.e,
-    "sin": math.sin,
-    "cos": math.cos,
-    "tan": math.tan,
-    "asin": math.asin,
-    "acos": math.acos,
-    "atan": math.atan,
-    "sqrt": math.sqrt,
-    "log": math.log,
-    "log10": math.log10,
-    "exp": math.exp,
-    "floor": math.floor,
-    "ceil": math.ceil,
-}
-
-ALLOWED_NODES = {
-    ast.Module, ast.Expr, ast.Assign, ast.FunctionDef, ast.Return,
-    ast.arguments, ast.arg, ast.BinOp, ast.UnaryOp, ast.Call, ast.Name,
-    ast.Constant, ast.Load, ast.Store, ast.Add, ast.Sub, ast.Mult,
-    ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.USub, ast.UAdd,
-    ast.Tuple, ast.List,
-}
-
-
-def _validate(code):
-    if not isinstance(code, str) or len(code) > MAX_CODE_LENGTH:
-        raise ValueError("Code is empty or exceeds 6000 characters.")
-    tree = ast.parse(code, mode="exec")
-    nodes = list(ast.walk(tree))
-    if len(nodes) > MAX_AST_NODES:
-        raise ValueError("Code is too complex for the local math runner.")
-
-    user_functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
-    assigned_names = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if not isinstance(target, ast.Name):
-                    raise ValueError("Only simple variable assignment is allowed.")
-                assigned_names.add(target.id)
-
-    allowed_names = set(SAFE_NAMES) | user_functions | assigned_names
-    for function in (node for node in tree.body if isinstance(node, ast.FunctionDef)):
-        if function.decorator_list or function.returns is not None or getattr(function, "type_params", []):
-            raise ValueError("Decorators and type annotations are not supported.")
-        if len(function.args.args) > 6 or function.args.vararg or function.args.kwarg:
-            raise ValueError("Functions can have up to six positional arguments.")
-        allowed_names.update(argument.arg for argument in function.args.args)
-
-    for node in nodes:
-        if type(node) not in ALLOWED_NODES:
-            raise ValueError(f"{type(node).__name__} is not allowed in safe math Python.")
-        if isinstance(node, ast.Name) and (node.id not in allowed_names or node.id.startswith("__")):
-            raise ValueError(f"Name '{node.id}' is not allowed.")
-        if isinstance(node, ast.Call):
-            if not isinstance(node.func, ast.Name) or node.func.id not in allowed_names:
-                raise ValueError("Only approved mathematical function calls are allowed.")
-        if isinstance(node, ast.Pow) and isinstance(getattr(node, "right", None), ast.Constant):
-            exponent = node.right.value
-            if isinstance(exponent, (int, float)) and abs(exponent) > 1000:
-                raise ValueError("Exponent magnitude must not exceed 1000.")
-    return tree
+# Chaquopy embeds a real CPython 3.12 runtime in the APK. These limits only
+# protect the Compose result panel from accidental log floods; they do not
+# restrict Python syntax, imports, statements, functions, classes, or modules.
+MAX_CODE_LENGTH = 20000
+MAX_OUTPUT_LENGTH = 12000
 
 
 def execute(code):
-    """Execute a small, safe mathematical Python program and return JSON for Kotlin."""
+    """Run a complete Python 3 program in the embedded Chaquopy interpreter.
+
+    The Kotlin bridge expects a JSON string. stdout and stderr are captured so
+    print(), warnings, and tracebacks can be shown in the app's output panel.
+    Normal CPython builtins and import machinery are preserved.
+    """
+    if not isinstance(code, str):
+        return json.dumps({"ok": False, "error": "Python source must be text."})
+    if not code.strip():
+        return json.dumps({"ok": False, "error": "Python source is empty."})
+    if len(code) > MAX_CODE_LENGTH:
+        return json.dumps({"ok": False, "error": f"Python source exceeds {MAX_CODE_LENGTH} characters."})
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    namespace = {
+        "__name__": "__main__",
+        "__file__": "<buge-python>",
+        "__package__": None,
+    }
+
     try:
-        tree = _validate(code)
-        output = []
+        compiled = compile(code, "<buge-python>", "exec")
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            exec(compiled, namespace, namespace)
 
-        def safe_print(*values):
-            text = " ".join(str(value) for value in values)
-            output.append(text[:MAX_OUTPUT_LENGTH])
+        output = stdout.getvalue()
+        error_output = stderr.getvalue()
+        combined = output + ("\n" if output and error_output else "") + error_output
+        if not combined.strip():
+            # A normal Python script has no implicit REPL echo. Show simple
+            # top-level values when the user did not call print().
+            hidden = {"__name__", "__file__", "__package__", "__builtins__"}
+            visible = [
+                f"{key} = {value!r}"
+                for key, value in namespace.items()
+                if key not in hidden and not key.startswith("_")
+            ]
+            combined = "\n".join(visible)
+        return json.dumps({"ok": True, "output": combined[:MAX_OUTPUT_LENGTH] or "Completed."})
+    except BaseException:
+        # Preserve the standard Python traceback for syntax, import, runtime,
+        # and user-raised exceptions.
+        traceback.print_exc(file=stderr)
+        return json.dumps({"ok": False, "error": stderr.getvalue()[-MAX_OUTPUT_LENGTH:]})
 
-        namespace = {"__builtins__": {**SAFE_BUILTINS, "print": safe_print}, **SAFE_NAMES}
-        namespace["print"] = safe_print
-        compiled = compile(tree, "<buge-python>", "exec")
-        exec(compiled, namespace, namespace)
-        if not output:
-            visible = {key: value for key, value in namespace.items() if key not in SAFE_NAMES and key != "__builtins__" and not callable(value)}
-            if visible:
-                output.append("\n".join(f"{key} = {value}" for key, value in visible.items()))
-        return json.dumps({"ok": True, "output": "\n".join(output)[:MAX_OUTPUT_LENGTH] or "Completed."})
-    except Exception as error:
-        return json.dumps({"ok": False, "error": str(error)[:MAX_OUTPUT_LENGTH]})
+
+DEFAULT_EXAMPLE = (
+    "import math\n"
+    "import statistics\n\n"
+    "values = [1, 2, 3, 4, 5]\n"
+    "mean = statistics.mean(values)\n"
+    "print(f'√81 = {math.sqrt(81)}')\n"
+    "print(f'mean = {mean}')"
+)
+
+__version__ = "1.2.8"
+__all__ = ["execute", "DEFAULT_EXAMPLE", "__version__"]
