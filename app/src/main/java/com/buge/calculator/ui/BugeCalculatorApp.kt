@@ -438,7 +438,7 @@ private fun ScientificKeyGrid(
                 horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp)
             ) {
                 group.forEach { (label, value) ->
-                    Box(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -447,13 +447,27 @@ private fun ScientificKeyGrid(
                             .clickable { onInput(value) },
                         contentAlignment = Alignment.Center
                     ) {
+                        // Scientific labels such as "asin(" or "nCr(" are longer than one
+                        // character, so the font is fitted to both the row height and the
+                        // pill width, keeping every glyph fully readable.
+                        val heightLimited = maxHeight.value * 0.60f
+                        val widthLimited = maxWidth.value * when {
+                            label.length <= 1 -> 0.74f
+                            label.length == 2 -> 0.62f
+                            label.length == 3 -> 0.50f
+                            else -> 0.36f
+                        }
+                        val preferred = if (compact) 13f else 14f
+                        val fontSize = minOf(heightLimited, widthLimited).coerceIn(9f, preferred)
                         Text(
                             text = label,
-                            fontSize = if (compact) 9.sp else 12.sp,
+                            fontSize = fontSize.sp,
+                            lineHeight = (fontSize * 1.1f).sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             maxLines = 1,
-                            softWrap = false
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
                         )
                     }
                 }
@@ -546,32 +560,47 @@ private fun CalculatorKey(
         KeyKind.ACTION -> MaterialTheme.colorScheme.onTertiaryContainer
         KeyKind.EQUALS -> MaterialTheme.colorScheme.onPrimary
     }
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(50))
             .background(containerColor)
-            .combinedClickable(onClick = spec.action, onLongClick = spec.longAction)
-            .padding(
-                horizontal = if (compact) 4.dp else 12.dp,
-                vertical = if (compact) 4.dp else 8.dp
-            ),
+            .combinedClickable(onClick = spec.action, onLongClick = spec.longAction),
         contentAlignment = Alignment.Center
     ) {
         if (spec.icon != null) {
-            Icon(spec.icon, contentDescription = spec.label, modifier = Modifier.size(if (expanded) 28.dp else 24.dp), tint = contentColor)
+            // Icon scales with the key's real height so it never overflows the pill.
+            val iconSize = minOf(maxHeight * 0.42f, if (expanded) 30.dp else 26.dp)
+            Icon(spec.icon, contentDescription = spec.label, modifier = Modifier.size(iconSize), tint = contentColor)
         } else {
+            // Fit the glyph inside the pill using the shortest dimension, so the label
+            // stays fully visible on every screen size instead of being clipped.
+            val heightLimited = maxHeight.value * KEY_TEXT_HEIGHT_RATIO
+            val widthLimited = when (spec.label.length) {
+                1 -> maxWidth.value * 0.72f
+                2 -> maxWidth.value * 0.46f
+                else -> maxWidth.value * 0.30f
+            }
+            val target = minOf(heightLimited, widthLimited)
+            val preferred = if (expanded) 26f else if (compact) 17f else 21f
+            val fontSize = target.coerceIn(10f, preferred)
             Text(
                 text = spec.label,
-                fontSize = if (expanded) 26.sp else if (compact) 16.sp else 21.sp,
+                fontSize = fontSize.sp,
+                lineHeight = (fontSize * 1.1f).sp,
                 fontWeight = FontWeight.Medium,
                 color = contentColor,
                 maxLines = 1,
-                softWrap = false
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
         }
     }
 }
+
+// A key glyph may occupy at most this share of the pill height, leaving a small
+// breathing margin so ascenders/descenders are never trimmed by the rounded shape.
+private const val KEY_TEXT_HEIGHT_RATIO = 0.56f
 
 @Composable
 private fun GraphScreen(
