@@ -62,6 +62,10 @@ fun PythonWorkbenchScreen(
                 Text(strings.pythonHelpDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
+        // No minLines/maxLines here: the field's height is driven purely by the
+        // Column weight, so the editable area always fills the whole box. Capping
+        // maxLines made the inner text area shorter than the weighted frame and
+        // left a large dead (non-editable) blank space at the bottom.
         OutlinedTextField(
             value = workspace.code,
             onValueChange = onCodeChange,
@@ -70,9 +74,7 @@ fun PythonWorkbenchScreen(
             placeholder = { Text(strings.pythonCodeHint) },
             leadingIcon = { Icon(Icons.Filled.Code, null) },
             textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-            visualTransformation = PythonSyntaxVisualTransformation(MaterialTheme.colorScheme),
-            minLines = 8,
-            maxLines = 14
+            visualTransformation = PythonSyntaxVisualTransformation(MaterialTheme.colorScheme)
         )
         Button(onClick = onRun, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.Code, null)

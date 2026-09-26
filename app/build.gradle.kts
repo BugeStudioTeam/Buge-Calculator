@@ -23,8 +23,8 @@ android {
         applicationId = "com.buge.calculator"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.2.8"
+        versionCode = 16
+        versionName = "1.3.11"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
