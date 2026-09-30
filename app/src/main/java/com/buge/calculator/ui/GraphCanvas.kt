@@ -43,11 +43,25 @@ fun FunctionGraphCanvas(
     // Canvas size is captured so the auto-fit pass can reason about real pixels without
     // forcing a draw. It is refreshed on every layout pass.
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    // Remember which expression the current viewport was auto-fitted for. Auto-fit must run at
+    // most once per expression, otherwise user zoom/pan would be overwritten on every
+    // recomposition.
+    var autoFittedExpression by remember { mutableStateOf<String?>(null) }
+    // Sync from the view-model only for genuine external changes (e.g. the Reset button or a
+    // restored session). IMPORTANT: this must not undo the auto-fit. Auto-fit intentionally does
+    // NOT write its scale back to the view-model, so graph.scale keeps its stale default (42f);
+    // blindly applying it here would snap sin(x) back to a flat line on the next recomposition
+    // (for instance when the grid toggle changes). We therefore re-apply the persistent values
+    // only when the user has not yet been auto-fitted for this expression, or when the incoming
+    // scale differs from what we would have fitted (a real external reset).
     LaunchedEffect(graph.offsetX, graph.offsetY, graph.scale, graph.showGrid) {
+        val syncViewport = autoFittedExpression != graph.expression || graph.scale != viewport.scale
+        // A Reset (view-model scale back to the default 42f) should re-fit, not show a flat line.
+        if (syncViewport && graph.scale == DEFAULT_GRAPH_SCALE) autoFittedExpression = null
         viewport = viewport.copy(
-            offsetX = graph.offsetX,
-            offsetY = graph.offsetY,
-            scale = graph.scale,
+            offsetX = if (syncViewport) graph.offsetX else viewport.offsetX,
+            offsetY = if (syncViewport) graph.offsetY else viewport.offsetY,
+            scale = if (syncViewport) graph.scale else viewport.scale,
             showGrid = graph.showGrid
         )
     }
@@ -55,26 +69,30 @@ fun FunctionGraphCanvas(
     val latestViewportCallback by rememberUpdatedState(onViewportChange)
     val compiledExpression = remember(graph.expression) { ExpressionEngine.compile(graph.expression) }
 
-    // Auto-fit runs once per expression change (and once the canvas has a real size).
-    // It keeps the axes equidistant and only rescales/pans: it never distorts one axis,
-    // so the picture stays mathematically correct while small-amplitude curves such as
-    // sin(x) fill the canvas instead of hugging the x-axis.
+    // Auto-fit runs once per expression, as soon as the canvas has a real size. It keeps the
+    // axes 1:1 equidistant and only rescales/pans: it never distorts one axis, so the picture
+    // stays mathematically correct while small-amplitude curves such as sin(x) fill the canvas
+    // instead of hugging the x-axis.
+    //
+    // The result is applied to the local viewport ONLY. It is deliberately NOT pushed back to
+    // the view-model: doing so would overwrite the persisted scale with the fitted value and
+    // (via the state->viewport sync above) fight with the auto-fit, leaving sin(x) flat again.
     LaunchedEffect(graph.expression, canvasSize) {
         val size = canvasSize
         if (size.width == 0 || size.height == 0) return@LaunchedEffect
+        if (autoFittedExpression == graph.expression) return@LaunchedEffect
         val fitted = autoFitViewport(
             expression = compiledExpression,
             angleUnit = angleUnit,
             widthPx = size.width.toFloat(),
             heightPx = size.height.toFloat()
         ) ?: return@LaunchedEffect
-        val next = latestViewport.copy(
+        autoFittedExpression = graph.expression
+        viewport = viewport.copy(
             scale = fitted.scale,
             offsetX = 0f,
             offsetY = fitted.offsetY
         )
-        viewport = next
-        latestViewportCallback(next.offsetX, next.offsetY, next.scale)
     }
 
     Canvas(
@@ -158,6 +176,9 @@ private fun autoFitViewport(
 }
 
 private data class FitResult(val scale: Float, val offsetY: Float)
+
+/** Default scale used by [com.buge.calculator.data.GraphSettings]; a Reset restores this value. */
+private const val DEFAULT_GRAPH_SCALE = 42f
 
 private fun DrawScope.drawGrid(center: Offset, scale: Float, gridUnit: Float) {
     val step = gridUnit * scale
