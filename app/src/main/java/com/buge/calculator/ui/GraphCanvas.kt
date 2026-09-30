@@ -47,23 +47,28 @@ fun FunctionGraphCanvas(
     // most once per expression, otherwise user zoom/pan would be overwritten on every
     // recomposition.
     var autoFittedExpression by remember { mutableStateOf<String?>(null) }
-    // Sync from the view-model only for genuine external changes (e.g. the Reset button or a
-    // restored session). IMPORTANT: this must not undo the auto-fit. Auto-fit intentionally does
-    // NOT write its scale back to the view-model, so graph.scale keeps its stale default (42f);
-    // blindly applying it here would snap sin(x) back to a flat line on the next recomposition
-    // (for instance when the grid toggle changes). We therefore re-apply the persistent values
-    // only when the user has not yet been auto-fitted for this expression, or when the incoming
-    // scale differs from what we would have fitted (a real external reset).
+    // The last viewport we pushed to the view-model. Any incoming `graph` that matches this is an
+    // echo of our own gesture/auto-fit and must be ignored. Any other value is a genuine external
+    // change (Reset button, restored session) and should be adopted.
+    var lastEmitted by remember { mutableStateOf<ViewportEcho?>(null) }
     LaunchedEffect(graph.offsetX, graph.offsetY, graph.scale, graph.showGrid) {
-        val syncViewport = autoFittedExpression != graph.expression || graph.scale != viewport.scale
-        // A Reset (view-model scale back to the default 42f) should re-fit, not show a flat line.
-        if (syncViewport && graph.scale == DEFAULT_GRAPH_SCALE) autoFittedExpression = null
-        viewport = viewport.copy(
-            offsetX = if (syncViewport) graph.offsetX else viewport.offsetX,
-            offsetY = if (syncViewport) graph.offsetY else viewport.offsetY,
-            scale = if (syncViewport) graph.scale else viewport.scale,
-            showGrid = graph.showGrid
-        )
+        val incoming = ViewportEcho(graph.offsetX, graph.offsetY, graph.scale)
+        val isEcho = incoming == lastEmitted
+        if (!isEcho) {
+            // Genuine external change: adopt it and treat the view as freshly (un)fitted so the
+            // auto-fit pass re-evaluates. A Reset (scale back to the default) re-fits; any other
+            // external jump simply adopts the incoming viewport.
+            viewport = viewport.copy(
+                offsetX = graph.offsetX,
+                offsetY = graph.offsetY,
+                scale = graph.scale
+            )
+            if (graph.scale == DEFAULT_GRAPH_SCALE) autoFittedExpression = null
+        }
+        // The grid toggle is cosmetic and must always be reflected, echo or not.
+        if (viewport.showGrid != graph.showGrid) {
+            viewport = viewport.copy(showGrid = graph.showGrid)
+        }
     }
     val latestViewport by rememberUpdatedState(viewport)
     val latestViewportCallback by rememberUpdatedState(onViewportChange)
@@ -93,6 +98,10 @@ fun FunctionGraphCanvas(
             offsetX = 0f,
             offsetY = fitted.offsetY
         )
+        // Record the fitted viewport as "ours" WITHOUT emitting it to the view-model. Otherwise the
+        // persisted scale would be overwritten and the echo guard would be defeated, which is what
+        // previously made a zoomed grid and curve disagree.
+        lastEmitted = ViewportEcho(0f, fitted.offsetY, fitted.scale)
     }
 
     Canvas(
@@ -108,6 +117,7 @@ fun FunctionGraphCanvas(
                         scale = (current.scale * zoom).coerceIn(12f, 250f)
                     )
                     viewport = next
+                    lastEmitted = ViewportEcho(next.offsetX, next.offsetY, next.scale)
                     latestViewportCallback(next.offsetX, next.offsetY, next.scale)
                 }
             }
@@ -176,6 +186,12 @@ private fun autoFitViewport(
 }
 
 private data class FitResult(val scale: Float, val offsetY: Float)
+
+/**
+ * Snapshot of the viewport fields we emit back to the view-model. Used to recognise the returning
+ * state update as an echo of our own action rather than an external change.
+ */
+private data class ViewportEcho(val offsetX: Float, val offsetY: Float, val scale: Float)
 
 /** Default scale used by [com.buge.calculator.data.GraphSettings]; a Reset restores this value. */
 private const val DEFAULT_GRAPH_SCALE = 42f
