@@ -35,6 +35,12 @@ data class GraphSettings(
     val offsetX: Float = 0f,
     val offsetY: Float = 0f,
     val scale: Float = 42f,
+    // Independent vertical scale. Defaults to the horizontal scale (1:1 equidistant view), but the
+    // auto-fit pass and pinch gestures can set it independently so that small-amplitude periodic
+    // curves such as sin(x) render as a proper wave instead of a flat line hugging the x-axis.
+    val scaleY: Float = 42f,
+    // When true the two axes are forced to share the same scale (mathematically faithful view).
+    val lockAspect: Boolean = false,
     val showGrid: Boolean = true
 )
 
@@ -103,6 +109,7 @@ data class BugeStrings(
     val plot: String,
     val resetView: String,
     val grid: String,
+    val lockAspect: String,
     val noHistory: String,
     val noHistoryDescription: String,
     val reuse: String,
@@ -151,7 +158,7 @@ val EnglishStrings = BugeStrings(
     clear = "Clear", delete = "Delete", equals = "Equals", angle = "Angle",
     degrees = "DEG", radians = "RAD", gradians = "GRAD", scientific = "Scientific", basic = "Basic",
     expression = "Expression", graphExpressionHint = "e.g. sin(x), x^2 - 4",
-    plot = "Plot", resetView = "Reset view", grid = "Grid", noHistory = "No calculations yet",
+    plot = "Plot", resetView = "Reset view", grid = "Grid", lockAspect = "Equal axes", noHistory = "No calculations yet",
     noHistoryDescription = "Your completed calculations will appear here.", reuse = "Reuse",
     clearHistory = "Clear history", appearance = "Appearance", colorSource = "Color source",
     dynamic = "Dynamic", lavender = "Lavender", ocean = "Ocean", forest = "Forest", sunset = "Sunset",
@@ -171,7 +178,7 @@ val ChineseStrings = BugeStrings(
     clear = "清除", delete = "删除", equals = "等于", angle = "角度",
     degrees = "度", radians = "弧度", gradians = "梯度", scientific = "科学", basic = "基础",
     expression = "表达式", graphExpressionHint = "例如 sin(x)、x^2 - 4",
-    plot = "绘制", resetView = "重置视图", grid = "网格", noHistory = "尚无计算记录",
+    plot = "绘制", resetView = "重置视图", grid = "网格", lockAspect = "等距坐标", noHistory = "尚无计算记录",
     noHistoryDescription = "已完成的计算会显示在此处。", reuse = "复用",
     clearHistory = "清空历史", appearance = "外观", colorSource = "配色来源",
     dynamic = "动态", lavender = "薰衣草", ocean = "海洋", forest = "森林", sunset = "日落",
@@ -188,11 +195,11 @@ val ChineseStrings = BugeStrings(
 
 fun AppLanguage.strings(): BugeStrings = when (this) {
     AppLanguage.CHINESE -> ChineseStrings
-    AppLanguage.SPANISH -> EnglishStrings.copy(calculator = "Calcular", graph = "Gráfica", history = "Historial", settings = "Ajustes", model3d = "Modelo 3D", language = "Idioma", colorSource = "Fuente de color", pythonHelp = "Python matemático local")
-    AppLanguage.FRENCH -> EnglishStrings.copy(calculator = "Calculer", graph = "Graphique", history = "Historique", settings = "Réglages", model3d = "Modèle 3D", language = "Langue", colorSource = "Source de couleur", pythonHelp = "Python mathématique local")
-    AppLanguage.JAPANESE -> EnglishStrings.copy(calculator = "計算", graph = "グラフ", history = "履歴", settings = "設定", model3d = "3Dモデル", language = "言語", colorSource = "カラーソース", pythonHelp = "ローカル数学 Python")
-    AppLanguage.KOREAN -> EnglishStrings.copy(calculator = "계산", graph = "그래프", history = "기록", settings = "설정", model3d = "3D 모델", language = "언어", colorSource = "색상 소스", pythonHelp = "로컬 수학 Python")
-    AppLanguage.GERMAN -> EnglishStrings.copy(calculator = "Rechnen", graph = "Diagramm", history = "Verlauf", settings = "Einstellungen", model3d = "3D-Modell", language = "Sprache", colorSource = "Farbquelle", pythonHelp = "Lokales mathematisches Python")
+    AppLanguage.SPANISH -> EnglishStrings.copy(calculator = "Calcular", graph = "Gráfica", history = "Historial", settings = "Ajustes", model3d = "Modelo 3D", language = "Idioma", colorSource = "Fuente de color", pythonHelp = "Python matemático local", lockAspect = "Ejes iguales")
+    AppLanguage.FRENCH -> EnglishStrings.copy(calculator = "Calculer", graph = "Graphique", history = "Historique", settings = "Réglages", model3d = "Modèle 3D", language = "Langue", colorSource = "Source de couleur", pythonHelp = "Python mathématique local", lockAspect = "Axes égaux")
+    AppLanguage.JAPANESE -> EnglishStrings.copy(calculator = "計算", graph = "グラフ", history = "履歴", settings = "設定", model3d = "3Dモデル", language = "言語", colorSource = "カラーソース", pythonHelp = "ローカル数学 Python", lockAspect = "等間隔軸")
+    AppLanguage.KOREAN -> EnglishStrings.copy(calculator = "계산", graph = "그래프", history = "기록", settings = "설정", model3d = "3D 모델", language = "언어", colorSource = "색상 소스", pythonHelp = "로컬 수학 Python", lockAspect = "등간격 축")
+    AppLanguage.GERMAN -> EnglishStrings.copy(calculator = "Rechnen", graph = "Diagramm", history = "Verlauf", settings = "Einstellungen", model3d = "3D-Modell", language = "Sprache", colorSource = "Farbquelle", pythonHelp = "Lokales mathematisches Python", lockAspect = "Gleiche Achsen")
     AppLanguage.ENGLISH -> EnglishStrings
 }
 

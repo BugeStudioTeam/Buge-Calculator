@@ -37,12 +37,26 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import java.util.Locale
 
+/**
+ * Maps between screen pixels and graph values using **independent** horizontal and vertical scales.
+ *
+ * Historically both axes shared one `scale` (1 unit x == 1 unit y on screen). That equidistant
+ * constraint is mathematically incompatible with drawing a *recognisable* wave such as sin(x):
+ * showing 1–2 full periods horizontally requires a small scale, which makes the ±1 amplitude only a
+ * few percent of the screen height (a "flat line"). Conversely, making ±1 prominent vertically
+ * requires a large scale, which fits less than one period across the screen.
+ *
+ * The viewport therefore carries `scale` (horizontal) and `scaleY` (vertical) separately
+ * (anisotropic scaling). A user toggle ([GraphSettings.lockAspect]) can force them equal again for
+ * those who prefer true equidistance.
+ */
+
 @Composable
 fun FunctionGraphCanvas(
     graph: GraphSettings,
     angleUnit: AngleUnit,
     modifier: Modifier = Modifier,
-    onViewportChange: (offsetX: Float, offsetY: Float, scale: Float) -> Unit
+    onViewportChange: (offsetX: Float, offsetY: Float, scaleX: Float, scaleY: Float) -> Unit
 ) {
     // Keep viewport movement local to the canvas. This makes pinch/drag smooth even while the
     // view-model persists the latest position in parallel.
@@ -52,29 +66,35 @@ fun FunctionGraphCanvas(
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     // Remember which expression the current viewport was auto-fitted for. Auto-fit must run at
     // most once per expression, otherwise user zoom/pan would be overwritten on every
-    // recomposition.
-    var autoFittedExpression by remember { mutableStateOf<String?>(null) }
+    // recomposition. The lock-aspect flag is part of the key so toggling it re-fits.
+    var autoFitKey by remember { mutableStateOf<String?>(null) }
     // The last viewport we pushed to the view-model. Any incoming `graph` that matches this is an
     // echo of our own gesture/auto-fit and must be ignored. Any other value is a genuine external
     // change (Reset button, restored session) and should be adopted.
     var lastEmitted by remember { mutableStateOf<ViewportEcho?>(null) }
-    LaunchedEffect(graph.offsetX, graph.offsetY, graph.scale, graph.showGrid) {
-        val incoming = ViewportEcho(graph.offsetX, graph.offsetY, graph.scale)
+    LaunchedEffect(graph.offsetX, graph.offsetY, graph.scale, graph.scaleY, graph.showGrid, graph.lockAspect) {
+        val incoming = ViewportEcho(graph.offsetX, graph.offsetY, graph.scale, graph.scaleY)
         val isEcho = incoming == lastEmitted
         if (!isEcho) {
             // Genuine external change: adopt it and treat the view as freshly (un)fitted so the
-            // auto-fit pass re-evaluates. A Reset (scale back to the default) re-fits; any other
+            // auto-fit pass re-evaluates. A Reset (scales back to the default) re-fits; any other
             // external jump simply adopts the incoming viewport.
             viewport = viewport.copy(
                 offsetX = graph.offsetX,
                 offsetY = graph.offsetY,
-                scale = graph.scale
+                scale = graph.scale,
+                scaleY = graph.scaleY
             )
-            if (graph.scale == DEFAULT_GRAPH_SCALE) autoFittedExpression = null
+            if (graph.scale == DEFAULT_GRAPH_SCALE && graph.scaleY == DEFAULT_GRAPH_SCALE) {
+                autoFitKey = null
+            }
         }
-        // The grid toggle is cosmetic and must always be reflected, echo or not.
+        // These are cosmetic/structural and must always be reflected, echo or not.
         if (viewport.showGrid != graph.showGrid) {
             viewport = viewport.copy(showGrid = graph.showGrid)
+        }
+        if (viewport.lockAspect != graph.lockAspect) {
+            viewport = viewport.copy(lockAspect = graph.lockAspect)
         }
     }
     val latestViewport by rememberUpdatedState(viewport)
@@ -83,34 +103,40 @@ fun FunctionGraphCanvas(
     // Shared text measurer for axis tick labels. Reused across frames so measuring is cheap.
     val textMeasurer = rememberTextMeasurer()
 
-    // Auto-fit runs once per expression, as soon as the canvas has a real size. It keeps the
-    // axes 1:1 equidistant and only rescales/pans: it never distorts one axis, so the picture
-    // stays mathematically correct while small-amplitude curves such as sin(x) fill the canvas
-    // instead of hugging the x-axis.
+    // Auto-fit runs once per (expression, lockAspect) pair, as soon as the canvas has a real size.
+    //
+    // It picks the horizontal scale so a small number of periods (or a sensible span for
+    // non-periodic functions) fill the width, and the vertical scale so the curve's amplitude fills
+    // the height. The two are chosen independently so sin(x) finally looks like a wave. When
+    // [GraphSettings.lockAspect] is on, the horizontal scale wins and the vertical one is forced to
+    // match it, restoring equidistance.
     //
     // The result is applied to the local viewport ONLY. It is deliberately NOT pushed back to
     // the view-model: doing so would overwrite the persisted scale with the fitted value and
     // (via the state->viewport sync above) fight with the auto-fit, leaving sin(x) flat again.
-    LaunchedEffect(graph.expression, canvasSize) {
+    LaunchedEffect(graph.expression, canvasSize, graph.lockAspect) {
         val size = canvasSize
         if (size.width == 0 || size.height == 0) return@LaunchedEffect
-        if (autoFittedExpression == graph.expression) return@LaunchedEffect
+        val key = graph.expression + "|" + graph.lockAspect
+        if (autoFitKey == key) return@LaunchedEffect
         val fitted = autoFitViewport(
             expression = compiledExpression,
             angleUnit = angleUnit,
             widthPx = size.width.toFloat(),
-            heightPx = size.height.toFloat()
+            heightPx = size.height.toFloat(),
+            lockAspect = graph.lockAspect
         ) ?: return@LaunchedEffect
-        autoFittedExpression = graph.expression
+        autoFitKey = key
         viewport = viewport.copy(
-            scale = fitted.scale,
+            scale = fitted.scaleX,
+            scaleY = fitted.scaleY,
             offsetX = 0f,
             offsetY = fitted.offsetY
         )
         // Record the fitted viewport as "ours" WITHOUT emitting it to the view-model. Otherwise the
         // persisted scale would be overwritten and the echo guard would be defeated, which is what
         // previously made a zoomed grid and curve disagree.
-        lastEmitted = ViewportEcho(0f, fitted.offsetY, fitted.scale)
+        lastEmitted = ViewportEcho(0f, fitted.offsetY, fitted.scaleX, fitted.scaleY)
     }
 
     Canvas(
@@ -120,30 +146,46 @@ fun FunctionGraphCanvas(
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     val current = latestViewport
+                    // Zoom scales both axes; when the aspect is locked they must stay equal. The
+                    // horizontal scale drives the lock so a pinch never breaks the ratio.
+                    val nextScaleX = (current.scale * zoom).coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+                    val nextScaleY = if (current.lockAspect) {
+                        nextScaleX
+                    } else {
+                        (current.scaleY * zoom).coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+                    }
                     val next = current.copy(
                         offsetX = current.offsetX + pan.x,
                         offsetY = current.offsetY + pan.y,
-                        scale = (current.scale * zoom).coerceIn(12f, 250f)
+                        scale = nextScaleX,
+                        scaleY = nextScaleY
                     )
                     viewport = next
-                    lastEmitted = ViewportEcho(next.offsetX, next.offsetY, next.scale)
-                    latestViewportCallback(next.offsetX, next.offsetY, next.scale)
+                    lastEmitted = ViewportEcho(next.offsetX, next.offsetY, next.scale, next.scaleY)
+                    latestViewportCallback(next.offsetX, next.offsetY, next.scale, next.scaleY)
                 }
             }
     ) {
         val center = Offset(size.width / 2f + viewport.offsetX, size.height / 2f + viewport.offsetY)
-        val gridUnit = preferredGridUnit(viewport.scale)
-        if (viewport.showGrid) drawGrid(center, viewport.scale, gridUnit)
+        // Each axis gets its own "nice" grid unit so tick labels stay readable at any aspect.
+        val gridUnitX = preferredGridUnit(viewport.scale)
+        val gridUnitY = preferredGridUnit(viewport.scaleY)
+        if (viewport.showGrid) {
+            drawGrid(center, viewport.scale, viewport.scaleY, gridUnitX, gridUnitY)
+        }
         drawAxes(center)
-        drawAxisLabels(textMeasurer, center, viewport.scale, gridUnit)
-        drawFunction(compiledExpression, angleUnit, center, viewport.scale)
+        drawAxisLabels(textMeasurer, center, viewport.scale, viewport.scaleY, gridUnitX, gridUnitY)
+        drawFunction(compiledExpression, angleUnit, center, viewport.scale, viewport.scaleY)
     }
 }
 
 /**
- * Chooses a viewport that makes the curve fill the canvas while keeping both axes at the
- * same scale (1 unit x == 1 unit y in pixels). The vertical offset is recentred so the curve
- * is vertically centred rather than pushed against an edge.
+ * Chooses a viewport that makes the curve fill the canvas. Horizontal and vertical scales are
+ * computed **independently** (anisotropic) so a wave like sin(x) shows both its periodicity and its
+ * amplitude; when [lockAspect] is true the horizontal scale is reused for both axes (1:1).
+ *
+ * The vertical offset is recentred so the curve is vertically centred rather than pushed against an
+ * edge.
  *
  * Returns null when the function cannot be sampled (invalid expression) or has no finite,
  * reasonably sized values in view, in which case the caller keeps the current viewport.
@@ -152,7 +194,8 @@ private fun autoFitViewport(
     expression: ExpressionEngine.CompiledExpression?,
     angleUnit: AngleUnit,
     widthPx: Float,
-    heightPx: Float
+    heightPx: Float,
+    lockAspect: Boolean
 ): FitResult? {
     if (expression == null || widthPx <= 0f || heightPx <= 0f) return null
 
@@ -175,63 +218,133 @@ private fun autoFitViewport(
     val amplitude = magnitudes[percentileIndex]
     if (!amplitude.isFinite() || amplitude <= 1e-6f) return null
 
-    // Vertical padding: leave ~10% head/foot room so peaks stay visible.
+    // ---- Vertical scale: make the curve's amplitude fill the height (with ~10% padding). ----
     val verticalPadding = 1.15f
     val scaleFromHeight = heightPx / (2f * amplitude * verticalPadding)
-    // Do not zoom in beyond a pleasant maximum (isolated vertical lines look odd), and keep
-    // within the same interactive bounds used by pinch-zoom.
-    val scale = scaleFromHeight.coerceIn(12f, 250f)
+    val scaleY = scaleFromHeight.coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+
+    // ---- Horizontal scale: show a small, pleasant number of x-units across the width. ----
+    // Detect periodicity cheaply; if a period is found we show ~3 of them, otherwise we fall back
+    // to a fixed span that suits polynomials and other aperiodic functions.
+    val period = estimatePeriod(expression, angleUnit)
+    val spanUnits = if (period != null) period * WAVE_PERIODS_ON_SCREEN else DEFAULT_X_SPAN_UNITS
+    val scaleFromWidth = widthPx / spanUnits
+    val scaleX = scaleFromWidth.coerceIn(MIN_GRAPH_SCALE, MAX_GRAPH_SCALE)
+
+    // Equidistance lock: the horizontal scale wins and drives the vertical one.
+    val finalScaleY = if (lockAspect) scaleX else scaleY
 
     // Centre vertically on the mid of the sampled range, clamped so the axes remain on screen.
     val minY = values.min()
     val maxY = values.max()
     val midY = (minY + maxY) / 2f
-    // pixel offset = -midY * scale because screen y grows downward.
-    val rawOffsetY = -midY * scale
+    // pixel offset = -midY * scaleY because screen y grows downward.
+    val rawOffsetY = -midY * finalScaleY
     // Keep the origin within the canvas so the axes are visible.
     val maxOffsetY = heightPx / 2f
     val offsetY = rawOffsetY.coerceIn(-maxOffsetY, maxOffsetY)
 
-    return FitResult(scale = scale, offsetY = offsetY)
+    return FitResult(scaleX = scaleX, scaleY = finalScaleY, offsetY = offsetY)
 }
 
-private data class FitResult(val scale: Float, val offsetY: Float)
+/**
+ * Cheaply estimates the fundamental period of a periodic function by scanning for the first x in
+ * (0, maxScan] at which f(x) returns close to f(0) once it has moved away from the value at 0.
+ *
+ * Returns null when no clear period is found (e.g. polynomials, exponentials, monotonic functions)
+ * so the caller can fall back to a fixed horizontal span.
+ */
+private fun estimatePeriod(
+    expression: ExpressionEngine.CompiledExpression,
+    angleUnit: AngleUnit
+): Float? {
+    val maxScan = 20f
+    val stride = 0.002f
+    val tolerance = 0.02f
+    val f0 = expression.evaluate(angleUnit, variable = 0.0).value?.toFloat() ?: return null
+    if (!f0.isFinite()) return null
+
+    var x = stride
+    var movedAway = false
+    while (x <= maxScan) {
+        val y = expression.evaluate(angleUnit, variable = x.toDouble()).value?.toFloat()
+        if (y == null || !y.isFinite()) return null
+        if (!movedAway) {
+            if (abs(y - f0) > 0.15f) movedAway = true
+        } else if (abs(y - f0) <= tolerance) {
+            return x
+        }
+        x += stride
+    }
+    return null
+}
+
+private data class FitResult(val scaleX: Float, val scaleY: Float, val offsetY: Float)
 
 /**
  * Snapshot of the viewport fields we emit back to the view-model. Used to recognise the returning
  * state update as an echo of our own action rather than an external change.
  */
-private data class ViewportEcho(val offsetX: Float, val offsetY: Float, val scale: Float)
+private data class ViewportEcho(
+    val offsetX: Float,
+    val offsetY: Float,
+    val scale: Float,
+    val scaleY: Float
+)
 
 /** Default scale used by [com.buge.calculator.data.GraphSettings]; a Reset restores this value. */
 private const val DEFAULT_GRAPH_SCALE = 42f
 
-private fun DrawScope.drawGrid(center: Offset, scale: Float, gridUnit: Float) {
-    val step = gridUnit * scale
+/** Interactive bounds for both scales. */
+private const val MIN_GRAPH_SCALE = 12f
+private const val MAX_GRAPH_SCALE = 250f
+
+/** Horizontal span (in x-units) used when the function has no detectable period. */
+private const val DEFAULT_X_SPAN_UNITS = 12f
+
+/** How many periods of a periodic function to fit across the width during auto-fit. */
+private const val WAVE_PERIODS_ON_SCREEN = 3f
+
+private fun DrawScope.drawGrid(
+    center: Offset,
+    scaleX: Float,
+    scaleY: Float,
+    gridUnitX: Float,
+    gridUnitY: Float
+) {
+    // Vertical lines are spaced by the x-unit grid; horizontal lines by the y-unit grid. Each axis
+    // now has its own pixel step because the scales can differ.
+    val stepX = gridUnitX * scaleX
+    val stepY = gridUnitY * scaleY
     val minorColor = Color(0x332D2F34)
-    val startX = center.x - floor(center.x / step) * step
-    var x = startX
-    while (x <= size.width) {
-        drawLine(minorColor, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
-        x += step
+    if (stepX > 0f && stepX.isFinite()) {
+        val startX = center.x - floor(center.x / stepX) * stepX
+        var x = startX
+        while (x <= size.width) {
+            drawLine(minorColor, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
+            x += stepX
+        }
+        x = startX - stepX
+        while (x >= 0f) {
+            drawLine(minorColor, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
+            x -= stepX
+        }
     }
-    x = startX - step
-    while (x >= 0f) {
-        drawLine(minorColor, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
-        x -= step
-    }
-    val startY = center.y - floor(center.y / step) * step
-    var y = startY
-    while (y <= size.height) {
-        drawLine(minorColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-        y += step
-    }
-    y = startY - step
-    while (y >= 0f) {
-        drawLine(minorColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
-        y -= step
+    if (stepY > 0f && stepY.isFinite()) {
+        val startY = center.y - floor(center.y / stepY) * stepY
+        var y = startY
+        while (y <= size.height) {
+            drawLine(minorColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            y += stepY
+        }
+        y = startY - stepY
+        while (y >= 0f) {
+            drawLine(minorColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            y -= stepY
+        }
     }
 }
+
 private fun DrawScope.drawAxes(center: Offset) {
     val axisColor = Color(0xFF62656D)
     if (center.x in 0f..size.width) drawLine(axisColor, Offset(center.x, 0f), Offset(center.x, size.height), 1.5.dp.toPx())
@@ -239,8 +352,10 @@ private fun DrawScope.drawAxes(center: Offset) {
 }
 
 /**
- * Draws numeric tick labels along both axes at every grid unit. Only ticks that fall inside the
- * canvas are labelled, and the origin is drawn once as a single "0" to avoid two overlapping zeros.
+ * Draws numeric tick labels along both axes. The x-axis uses [gridUnitX] * [scaleX] and the y-axis
+ * uses [gridUnitY] * [scaleY], so the labels stay meaningful even when the two axes have different
+ * scales (anisotropic view). Only ticks inside the canvas are labelled, and the origin is drawn once
+ * as a single "0".
  *
  * Labels sit just outside the axes when they are on-screen; when an axis is scrolled off-screen the
  * labels are pinned to the corresponding edge so the user always knows the current scale.
@@ -248,58 +363,66 @@ private fun DrawScope.drawAxes(center: Offset) {
 private fun DrawScope.drawAxisLabels(
     textMeasurer: TextMeasurer,
     center: Offset,
-    scale: Float,
-    gridUnit: Float
+    scaleX: Float,
+    scaleY: Float,
+    gridUnitX: Float,
+    gridUnitY: Float
 ) {
     val labelColor = Color(0xFF5A5D64)
     val labelStyle = TextStyle(color = labelColor, fontSize = 11.sp)
-    val step = gridUnit * scale
-    if (step <= 0f || !step.isFinite()) return
-    // Skip labels when ticks are too dense to read (keep at least ~34px between labels).
+    // Skip labels when ticks are too dense to read (keep at least ~34px between labels); computed
+    // per axis because each axis now has its own pixel step.
     val minSpacingPx = 34f
-    val tickEvery = maxOf(1, (minSpacingPx / step).let { ceil(it).toInt() })
 
-    // X axis labels: numbers below the x-axis line (or pinned to the bottom edge when off-screen).
-    val axisY = center.y.coerceIn(0f, size.height)
-    var index = floor((0f - center.x) / step).toInt() - 1
-    var ticks = 0
-    while (true) {
-        val pixelX = center.x + index * step
-        if (pixelX > size.width) break
-        if (pixelX >= 0f && index % tickEvery == 0 && index != 0) {
-            val value = index * gridUnit
-            val text = formatTick(value)
-            val layout = textMeasurer.measure(text, labelStyle)
-            val labelY = (axisY + 4.dp.toPx()).coerceAtMost(size.height - layout.size.height)
-            val labelX = (pixelX - layout.size.width / 2f)
-                .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
-            drawText(layout, topLeft = Offset(labelX, labelY))
-            ticks++
+    val stepX = gridUnitX * scaleX
+    if (stepX > 0f && stepX.isFinite()) {
+        val tickEvery = maxOf(1, ceil(minSpacingPx / stepX).toInt())
+        // X axis labels: numbers below the x-axis line (or pinned to the bottom edge if off-screen).
+        val axisY = center.y.coerceIn(0f, size.height)
+        var index = floor((0f - center.x) / stepX).toInt() - 1
+        var ticks = 0
+        while (true) {
+            val pixelX = center.x + index * stepX
+            if (pixelX > size.width) break
+            if (pixelX >= 0f && index % tickEvery == 0 && index != 0) {
+                val value = index * gridUnitX
+                val text = formatTick(value)
+                val layout = textMeasurer.measure(text, labelStyle)
+                val labelY = (axisY + 4.dp.toPx()).coerceAtMost(size.height - layout.size.height)
+                val labelX = (pixelX - layout.size.width / 2f)
+                    .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+                drawText(layout, topLeft = Offset(labelX, labelY))
+                ticks++
+            }
+            index++
+            if (ticks > 200) break
         }
-        index++
-        if (ticks > 200) break
     }
 
-    // Y axis labels: numbers to the left of the y-axis line (or pinned to the left edge).
-    val axisX = center.x.coerceIn(0f, size.width)
-    index = floor((0f - center.y) / step).toInt() - 1
-    ticks = 0
-    while (true) {
-        val pixelY = center.y + index * step
-        if (pixelY > size.height) break
-        if (pixelY >= 0f && index % tickEvery == 0 && index != 0) {
-            val value = -index * gridUnit
-            val text = formatTick(value)
-            val layout = textMeasurer.measure(text, labelStyle)
-            val labelX = (axisX - 6.dp.toPx() - layout.size.width)
-                .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
-            val labelY = (pixelY - layout.size.height / 2f)
-                .coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f))
-            drawText(layout, topLeft = Offset(labelX, labelY))
-            ticks++
+    val stepY = gridUnitY * scaleY
+    if (stepY > 0f && stepY.isFinite()) {
+        val tickEvery = maxOf(1, ceil(minSpacingPx / stepY).toInt())
+        // Y axis labels: numbers to the left of the y-axis line (or pinned to the left edge).
+        val axisX = center.x.coerceIn(0f, size.width)
+        var index = floor((0f - center.y) / stepY).toInt() - 1
+        var ticks = 0
+        while (true) {
+            val pixelY = center.y + index * stepY
+            if (pixelY > size.height) break
+            if (pixelY >= 0f && index % tickEvery == 0 && index != 0) {
+                val value = -index * gridUnitY
+                val text = formatTick(value)
+                val layout = textMeasurer.measure(text, labelStyle)
+                val labelX = (axisX - 6.dp.toPx() - layout.size.width)
+                    .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+                val labelY = (pixelY - layout.size.height / 2f)
+                    .coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f))
+                drawText(layout, topLeft = Offset(labelX, labelY))
+                ticks++
+            }
+            index++
+            if (ticks > 200) break
         }
-        index++
-        if (ticks > 200) break
     }
 
     // Origin: a single "0" placed at the bottom-left of the crossing point, only if visible.
@@ -338,7 +461,8 @@ private fun DrawScope.drawFunction(
     expression: ExpressionEngine.CompiledExpression?,
     angleUnit: AngleUnit,
     center: Offset,
-    scale: Float
+    scaleX: Float,
+    scaleY: Float
 ) {
     if (expression == null) return
     val graphColor = Color(0xFF6750A4)
@@ -349,13 +473,13 @@ private fun DrawScope.drawFunction(
     var hasPreviousPoint = false
     var previousY = Float.NaN
     for (pixelX in 0..size.width.toInt() step pixelStep) {
-        val xValue = (pixelX - center.x) / scale
+        val xValue = (pixelX - center.x) / scaleX
         val yValue = expression.evaluate(angleUnit, variable = xValue.toDouble()).value?.toFloat()
         if (yValue == null || !yValue.isFinite()) {
             hasPreviousPoint = false
             continue
         }
-        val pixelY = center.y - yValue * scale
+        val pixelY = center.y - yValue * scaleY
         val visible = pixelY in -size.height * 1.5f..size.height * 2.5f
         val continuous = hasPreviousPoint && abs(pixelY - previousY) < size.height * 0.8f
         if (!visible || !continuous) {

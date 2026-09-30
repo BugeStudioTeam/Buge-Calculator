@@ -104,14 +104,34 @@ class CalculatorViewModel(application: Application) : AndroidViewModel(applicati
         _state.value = _state.value.copy(graph = _state.value.graph.copy(showGrid = enabled))
     }
 
-    fun updateGraphViewport(offsetX: Float, offsetY: Float, scale: Float) {
+    fun updateGraphViewport(offsetX: Float, offsetY: Float, scale: Float, scaleY: Float = scale) {
+        val lockAspect = _state.value.graph.lockAspect
+        val lockedScaleY = if (lockAspect) scale else scaleY
         _state.value = _state.value.copy(
-            graph = _state.value.graph.copy(offsetX = offsetX, offsetY = offsetY, scale = scale.coerceIn(12f, 250f))
+            graph = _state.value.graph.copy(
+                offsetX = offsetX,
+                offsetY = offsetY,
+                scale = scale.coerceIn(12f, 250f),
+                scaleY = lockedScaleY.coerceIn(12f, 250f)
+            )
+        )
+    }
+
+    fun setGraphLockAspect(enabled: Boolean) {
+        val current = _state.value.graph
+        _state.value = _state.value.copy(
+            graph = current.copy(
+                lockAspect = enabled,
+                // Enabling the lock snaps both axes to the horizontal scale immediately.
+                scaleY = if (enabled) current.scale else current.scaleY
+            )
         )
     }
 
     fun resetGraphView() {
-        _state.value = _state.value.copy(graph = _state.value.graph.copy(offsetX = 0f, offsetY = 0f, scale = 42f))
+        _state.value = _state.value.copy(
+            graph = _state.value.graph.copy(offsetX = 0f, offsetY = 0f, scale = 42f, scaleY = 42f)
+        )
     }
 
     fun setSurfaceExpression(expression: String) {

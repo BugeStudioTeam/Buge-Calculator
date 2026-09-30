@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -125,6 +127,7 @@ fun BugeCalculatorApp(viewModel: CalculatorViewModel = viewModel()) {
             onGraphExpression = viewModel::setGraphExpression,
             onGraphGrid = viewModel::setGraphGrid,
             onGraphViewport = viewModel::updateGraphViewport,
+            onGraphLockAspect = viewModel::setGraphLockAspect,
             onResetGraph = viewModel::resetGraphView,
             onSurfaceExpression = viewModel::setSurfaceExpression,
             onSurfaceMesh = viewModel::setSurfaceMesh,
@@ -150,7 +153,8 @@ private fun CalculatorRoot(
     onMode: (CalculatorMode) -> Unit,
     onGraphExpression: (String) -> Unit,
     onGraphGrid: (Boolean) -> Unit,
-    onGraphViewport: (Float, Float, Float) -> Unit,
+    onGraphViewport: (Float, Float, Float, Float) -> Unit,
+    onGraphLockAspect: (Boolean) -> Unit,
     onResetGraph: () -> Unit,
     onSurfaceExpression: (String) -> Unit,
     onSurfaceMesh: (Boolean) -> Unit,
@@ -203,7 +207,8 @@ private fun CalculatorRoot(
                 AppDestination.GRAPH -> GraphScreen(
                     modifier = Modifier.padding(padding), state = state, strings = strings,
                     onExpressionChange = onGraphExpression, onGridChange = onGraphGrid,
-                    onViewportChange = onGraphViewport, onReset = onResetGraph
+                    onViewportChange = onGraphViewport, onLockAspectChange = onGraphLockAspect,
+                    onReset = onResetGraph
                 )
                 AppDestination.MODEL_3D -> Model3DScreen(
                     modifier = Modifier.padding(padding), surface = state.surface, angleUnit = state.angleUnit, strings = strings,
@@ -609,7 +614,8 @@ private fun GraphScreen(
     strings: BugeStrings,
     onExpressionChange: (String) -> Unit,
     onGridChange: (Boolean) -> Unit,
-    onViewportChange: (Float, Float, Float) -> Unit,
+    onViewportChange: (Float, Float, Float, Float) -> Unit,
+    onLockAspectChange: (Boolean) -> Unit,
     onReset: () -> Unit
 ) {
     Column(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -633,6 +639,18 @@ private fun GraphScreen(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             FilterChip(selected = state.graph.showGrid, onClick = { onGridChange(!state.graph.showGrid) }, label = { Text(strings.grid) })
+            FilterChip(
+                selected = state.graph.lockAspect,
+                onClick = { onLockAspectChange(!state.graph.lockAspect) },
+                label = { Text(strings.lockAspect) },
+                leadingIcon = {
+                    Icon(
+                        if (state.graph.lockAspect) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                        null,
+                        Modifier.size(FilterChipDefaults.IconSize)
+                    )
+                }
+            )
             Spacer(Modifier.weight(1f))
             OutlinedButton(onClick = onReset) {
                 Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp))
