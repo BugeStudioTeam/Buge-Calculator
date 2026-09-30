@@ -19,16 +19,23 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.buge.calculator.data.AngleUnit
 import com.buge.calculator.data.GraphSettings
 import com.buge.calculator.engine.ExpressionEngine
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import java.util.Locale
 
 @Composable
 fun FunctionGraphCanvas(
@@ -73,6 +80,8 @@ fun FunctionGraphCanvas(
     val latestViewport by rememberUpdatedState(viewport)
     val latestViewportCallback by rememberUpdatedState(onViewportChange)
     val compiledExpression = remember(graph.expression) { ExpressionEngine.compile(graph.expression) }
+    // Shared text measurer for axis tick labels. Reused across frames so measuring is cheap.
+    val textMeasurer = rememberTextMeasurer()
 
     // Auto-fit runs once per expression, as soon as the canvas has a real size. It keeps the
     // axes 1:1 equidistant and only rescales/pans: it never distorts one axis, so the picture
@@ -126,6 +135,7 @@ fun FunctionGraphCanvas(
         val gridUnit = preferredGridUnit(viewport.scale)
         if (viewport.showGrid) drawGrid(center, viewport.scale, gridUnit)
         drawAxes(center)
+        drawAxisLabels(textMeasurer, center, viewport.scale, gridUnit)
         drawFunction(compiledExpression, angleUnit, center, viewport.scale)
     }
 }
@@ -222,12 +232,107 @@ private fun DrawScope.drawGrid(center: Offset, scale: Float, gridUnit: Float) {
         y -= step
     }
 }
-
 private fun DrawScope.drawAxes(center: Offset) {
     val axisColor = Color(0xFF62656D)
     if (center.x in 0f..size.width) drawLine(axisColor, Offset(center.x, 0f), Offset(center.x, size.height), 1.5.dp.toPx())
     if (center.y in 0f..size.height) drawLine(axisColor, Offset(0f, center.y), Offset(size.width, center.y), 1.5.dp.toPx())
 }
+
+/**
+ * Draws numeric tick labels along both axes at every grid unit. Only ticks that fall inside the
+ * canvas are labelled, and the origin is drawn once as a single "0" to avoid two overlapping zeros.
+ *
+ * Labels sit just outside the axes when they are on-screen; when an axis is scrolled off-screen the
+ * labels are pinned to the corresponding edge so the user always knows the current scale.
+ */
+private fun DrawScope.drawAxisLabels(
+    textMeasurer: TextMeasurer,
+    center: Offset,
+    scale: Float,
+    gridUnit: Float
+) {
+    val labelColor = Color(0xFF5A5D64)
+    val labelStyle = TextStyle(color = labelColor, fontSize = 11.sp)
+    val step = gridUnit * scale
+    if (step <= 0f || !step.isFinite()) return
+    // Skip labels when ticks are too dense to read (keep at least ~34px between labels).
+    val minSpacingPx = 34f
+    val tickEvery = maxOf(1, (minSpacingPx / step).let { ceil(it).toInt() })
+
+    // X axis labels: numbers below the x-axis line (or pinned to the bottom edge when off-screen).
+    val axisY = center.y.coerceIn(0f, size.height)
+    var index = floor((0f - center.x) / step).toInt() - 1
+    var ticks = 0
+    while (true) {
+        val pixelX = center.x + index * step
+        if (pixelX > size.width) break
+        if (pixelX >= 0f && index % tickEvery == 0 && index != 0) {
+            val value = index * gridUnit
+            val text = formatTick(value)
+            val layout = textMeasurer.measure(text, labelStyle)
+            val labelY = (axisY + 4.dp.toPx()).coerceAtMost(size.height - layout.size.height)
+            val labelX = (pixelX - layout.size.width / 2f)
+                .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+            drawText(layout, topLeft = Offset(labelX, labelY))
+            ticks++
+        }
+        index++
+        if (ticks > 200) break
+    }
+
+    // Y axis labels: numbers to the left of the y-axis line (or pinned to the left edge).
+    val axisX = center.x.coerceIn(0f, size.width)
+    index = floor((0f - center.y) / step).toInt() - 1
+    ticks = 0
+    while (true) {
+        val pixelY = center.y + index * step
+        if (pixelY > size.height) break
+        if (pixelY >= 0f && index % tickEvery == 0 && index != 0) {
+            val value = -index * gridUnit
+            val text = formatTick(value)
+            val layout = textMeasurer.measure(text, labelStyle)
+            val labelX = (axisX - 6.dp.toPx() - layout.size.width)
+                .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+            val labelY = (pixelY - layout.size.height / 2f)
+                .coerceIn(0f, (size.height - layout.size.height).coerceAtLeast(0f))
+            drawText(layout, topLeft = Offset(labelX, labelY))
+            ticks++
+        }
+        index++
+        if (ticks > 200) break
+    }
+
+    // Origin: a single "0" placed at the bottom-left of the crossing point, only if visible.
+    if (center.x in 0f..size.width && center.y in 0f..size.height) {
+        val layout = textMeasurer.measure("0", labelStyle)
+        val originX = (center.x - 4.dp.toPx() - layout.size.width)
+            .coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+        val originY = (center.y + 4.dp.toPx()).coerceAtMost(size.height - layout.size.height)
+        drawText(layout, topLeft = Offset(originX, originY))
+    }
+}
+
+/** Formats a tick value without trailing floating-point noise (e.g. 0.3 instead of 0.30000001). */
+private fun formatTick(value: Float): String {
+    if (value == 0f) return "0"
+    val absValue = abs(value)
+    return when {
+        absValue >= 100000f || absValue < 0.001f -> {
+            // Exponential for extreme magnitudes, trimmed of trailing zeros.
+            String.format(Locale.US, "%.1e", value).replace(".0e", "e")
+        }
+        absValue >= 1000f -> {
+            if (value % 1f == 0f) value.toLong().toString()
+            else String.format(Locale.US, "%.0f", value)
+        }
+        absValue >= 1f -> {
+            if (value % 1f == 0f) value.toLong().toString()
+            else String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
+        }
+        else -> String.format(Locale.US, "%.3f", value).trimEnd('0').trimEnd('.')
+    }
+}
+
 
 private fun DrawScope.drawFunction(
     expression: ExpressionEngine.CompiledExpression?,
