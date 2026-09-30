@@ -112,7 +112,7 @@ import com.buge.calculator.viewmodel.CalculatorViewModel
 fun BugeCalculatorApp(viewModel: CalculatorViewModel = viewModel()) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val strings = settings.language.strings()
+    val strings = settings.language.strings(LocalContext.current)
     BugeTheme(settings) {
         CalculatorRoot(
             state = state,

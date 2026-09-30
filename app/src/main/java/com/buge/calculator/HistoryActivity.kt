@@ -31,7 +31,7 @@ class HistoryActivity : ComponentActivity() {
             val viewModel: CalculatorViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             val state by viewModel.state.collectAsStateWithLifecycle()
-            val strings = settings.language.strings()
+            val strings = settings.language.strings(this@HistoryActivity)
             BugeTheme(settings) {
                 Scaffold(
                     topBar = {

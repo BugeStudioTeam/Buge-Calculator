@@ -31,7 +31,7 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             val viewModel: CalculatorViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
-            val strings = settings.language.strings()
+            val strings = settings.language.strings(this@SettingsActivity)
             BugeTheme(settings) {
                 Scaffold(
                     topBar = {

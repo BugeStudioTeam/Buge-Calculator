@@ -1,11 +1,16 @@
 import java.util.Properties
 
+val keystoreFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
-    load(rootProject.file("keystore.properties").inputStream())
+    if (keystoreFile.exists()) {
+        keystoreFile.inputStream().use { load(it) }
+    }
 }
 val configuredStoreFile = keystoreProperties.getProperty("storeFile")
-val releaseStoreFile = rootProject.file(configuredStoreFile).let { rootFile ->
-    if (rootFile.exists()) rootFile else file(configuredStoreFile)
+val releaseStoreFile = configuredStoreFile?.let { path ->
+    rootProject.file(path).let { rootFile ->
+        if (rootFile.exists()) rootFile else file(path)
+    }
 }
 
 plugins {
@@ -34,16 +39,20 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = releaseStoreFile
-            storePassword = keystoreProperties.getProperty("storePassword")
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
+        // Only wired up when keystore.properties is present, so a checkout without the
+        // private signing material still configures and builds (debug builds unaffected).
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

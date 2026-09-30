@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Copyright (C) 2026 Buge Studio -->
+<resources>
+    <string name="app_name">Buge 计算器</string>
+    <string name="app_description">功能强大的表现力科学计算器，支持函数绘图。</string>
+    <string name="developer_name">Buge Studio</string>
+
+    <!-- Navigation / destinations -->
+    <string name="calculator">计算</string>
+    <string name="graph">绘图</string>
+    <string name="history">历史</string>
+    <string name="settings">设置</string>
+    <string name="model3d">三维模型</string>
+    <string name="python">Python</string>
+
+    <!-- Calculator screen -->
+    <string name="clear">清除</string>
+    <string name="delete">删除</string>
+    <string name="equals">等于</string>
+    <string name="angle">角度</string>
+    <string name="degrees">度</string>
+    <string name="radians">弧度</string>
+    <string name="gradians">梯度</string>
+    <string name="scientific">科学</string>
+    <string name="basic">基础</string>
+    <string name="expression">表达式</string>
+    <string name="invalidExpression">表达式无效</string>
+    <string name="unsupported">暂不支持的运算</string>
+
+    <!-- Graph screen -->
+    <string name="graphExpressionHint">例如 sin(x)、x^2 - 4</string>
+    <string name="plot">绘制</string>
+    <string name="resetView">重置视图</string>
+    <string name="grid">网格</string>
+    <string name="lockAspect">等距坐标</string>
+    <string name="graphHelp">交互式图像</string>
+    <string name="graphHelpDescription">双指缩放、拖动平移。请使用 x 作为自变量。</string>
+
+    <!-- History screen -->
+    <string name="noHistory">尚无计算记录</string>
+    <string name="noHistoryDescription">已完成的计算会显示在此处。</string>
+    <string name="reuse">复用</string>
+    <string name="clearHistory">清空历史</string>
+
+    <!-- Settings screen -->
+    <string name="appearance">外观</string>
+    <string name="colorSource">配色来源</string>
+    <string name="dynamic">动态</string>
+    <string name="lavender">薰衣草</string>
+    <string name="ocean">海洋</string>
+    <string name="forest">森林</string>
+    <string name="sunset">日落</string>
+    <string name="custom">自定义</string>
+    <string name="displayMode">显示模式</string>
+    <string name="system">跟随系统</string>
+    <string name="light">浅色</string>
+    <string name="dark">深色</string>
+    <string name="language">语言</string>
+    <string name="english">English</string>
+    <string name="chinese">中文</string>
+    <string name="haptics">触感反馈</string>
+    <string name="customColor">自定义种子色</string>
+    <string name="red">红</string>
+    <string name="green">绿</string>
+    <string name="blue">蓝</string>
+
+    <!-- 3D model screen -->
+    <string name="surfaceExpressionHint">例如 sin(sqrt(x^2+y^2))</string>
+    <string name="surfaceHelp">公式曲面</string>
+    <string name="surfaceHelpDescription">输入 z = f(x, y)，拖动旋转，双指缩放。</string>
+    <string name="resetCamera">重置视角</string>
+    <string name="showMesh">网格</string>
+
+    <!-- Python screen -->
+    <string name="pythonCode">Python 代码</string>
+    <string name="pythonCodeHint">编写数学函数或计算</string>
+    <string name="runPython">运行 Python</string>
+    <string name="pythonResult">输出</string>
+    <string name="pythonHelp">完整本地 Python 3.12</string>
+    <string name="pythonHelpDescription">通过 Chaquopy 在本设备运行完整 Python 3.12，支持 import、函数、类、循环、异常和标准库。</string>
+</resources>

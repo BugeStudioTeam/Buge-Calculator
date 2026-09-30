@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Copyright (C) 2026 Buge Studio -->
+<resources>
+    <!-- Only the strings that are actually translated today are overridden here.
+         All other keys fall back to res/values/strings.xml (English), matching
+         the previous AppLanguage.strings() behaviour exactly. -->
+
+    <!-- Navigation / destinations -->
+    <string name="calculator">Rechnen</string>
+    <string name="graph">Diagramm</string>
+    <string name="history">Verlauf</string>
+    <string name="settings">Einstellungen</string>
+    <string name="model3d">3D-Modell</string>
+
+    <!-- Graph screen -->
+    <string name="lockAspect">Gleiche Achsen</string>
+
+    <!-- Settings screen -->
+    <string name="colorSource">Farbquelle</string>
+    <string name="language">Sprache</string>
+
+    <!-- Python screen -->
+    <string name="pythonHelp">Lokales mathematisches Python</string>
+</resources>
