@@ -2,6 +2,7 @@ package com.buge.calculator.data
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
+import com.buge.calculator.R
 import java.text.DecimalFormat
 import java.util.UUID
 
