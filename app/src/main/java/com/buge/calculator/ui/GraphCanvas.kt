@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.buge.calculator.data.AngleUnit
 import com.buge.calculator.data.GraphSettings
@@ -26,6 +28,7 @@ import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 @Composable
 fun FunctionGraphCanvas(
@@ -37,6 +40,9 @@ fun FunctionGraphCanvas(
     // Keep viewport movement local to the canvas. This makes pinch/drag smooth even while the
     // view-model persists the latest position in parallel.
     var viewport by remember { mutableStateOf(graph) }
+    // Canvas size is captured so the auto-fit pass can reason about real pixels without
+    // forcing a draw. It is refreshed on every layout pass.
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     LaunchedEffect(graph.offsetX, graph.offsetY, graph.scale, graph.showGrid) {
         viewport = viewport.copy(
             offsetX = graph.offsetX,
@@ -49,9 +55,32 @@ fun FunctionGraphCanvas(
     val latestViewportCallback by rememberUpdatedState(onViewportChange)
     val compiledExpression = remember(graph.expression) { ExpressionEngine.compile(graph.expression) }
 
+    // Auto-fit runs once per expression change (and once the canvas has a real size).
+    // It keeps the axes equidistant and only rescales/pans: it never distorts one axis,
+    // so the picture stays mathematically correct while small-amplitude curves such as
+    // sin(x) fill the canvas instead of hugging the x-axis.
+    LaunchedEffect(graph.expression, canvasSize) {
+        val size = canvasSize
+        if (size.width == 0 || size.height == 0) return@LaunchedEffect
+        val fitted = autoFitViewport(
+            expression = compiledExpression,
+            angleUnit = angleUnit,
+            widthPx = size.width.toFloat(),
+            heightPx = size.height.toFloat()
+        ) ?: return@LaunchedEffect
+        val next = latestViewport.copy(
+            scale = fitted.scale,
+            offsetX = 0f,
+            offsetY = fitted.offsetY
+        )
+        viewport = next
+        latestViewportCallback(next.offsetX, next.offsetY, next.scale)
+    }
+
     Canvas(
         modifier = modifier
             .fillMaxSize()
+            .onSizeChanged { canvasSize = it }
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     val current = latestViewport
@@ -72,6 +101,63 @@ fun FunctionGraphCanvas(
         drawFunction(compiledExpression, angleUnit, center, viewport.scale)
     }
 }
+
+/**
+ * Chooses a viewport that makes the curve fill the canvas while keeping both axes at the
+ * same scale (1 unit x == 1 unit y in pixels). The vertical offset is recentred so the curve
+ * is vertically centred rather than pushed against an edge.
+ *
+ * Returns null when the function cannot be sampled (invalid expression) or has no finite,
+ * reasonably sized values in view, in which case the caller keeps the current viewport.
+ */
+private fun autoFitViewport(
+    expression: ExpressionEngine.CompiledExpression?,
+    angleUnit: AngleUnit,
+    widthPx: Float,
+    heightPx: Float
+): FitResult? {
+    if (expression == null || widthPx <= 0f || heightPx <= 0f) return null
+
+    // Sample across a generous horizontal window; the actual window depends on the scale we
+    // are about to choose, so we first sample on a fixed wide domain and derive amplitude.
+    val sampleCount = 400
+    val sampleDomain = 40f // x in [-20, 20] is wide enough for typical on-screen ranges
+    val values = ArrayList<Float>(sampleCount + 1)
+    for (i in 0..sampleCount) {
+        val x = -sampleDomain + (2f * sampleDomain) * i / sampleCount
+        val y = expression.evaluate(angleUnit, variable = x.toDouble()).value?.toFloat() ?: continue
+        if (y.isFinite() && abs(y) < 1e6f) values += y
+    }
+    if (values.isEmpty()) return null
+
+    // Use a high percentile of |y| instead of the max so a single narrow spike (e.g. tan)
+    // does not collapse the whole curve into a flat line.
+    val magnitudes = values.map { abs(it) }.sorted()
+    val percentileIndex = (magnitudes.size * 0.9f).roundToInt().coerceIn(0, magnitudes.size - 1)
+    val amplitude = magnitudes[percentileIndex]
+    if (!amplitude.isFinite() || amplitude <= 1e-6f) return null
+
+    // Vertical padding: leave ~10% head/foot room so peaks stay visible.
+    val verticalPadding = 1.15f
+    val scaleFromHeight = heightPx / (2f * amplitude * verticalPadding)
+    // Do not zoom in beyond a pleasant maximum (isolated vertical lines look odd), and keep
+    // within the same interactive bounds used by pinch-zoom.
+    val scale = scaleFromHeight.coerceIn(12f, 250f)
+
+    // Centre vertically on the mid of the sampled range, clamped so the axes remain on screen.
+    val minY = values.min()
+    val maxY = values.max()
+    val midY = (minY + maxY) / 2f
+    // pixel offset = -midY * scale because screen y grows downward.
+    val rawOffsetY = -midY * scale
+    // Keep the origin within the canvas so the axes are visible.
+    val maxOffsetY = heightPx / 2f
+    val offsetY = rawOffsetY.coerceIn(-maxOffsetY, maxOffsetY)
+
+    return FitResult(scale = scale, offsetY = offsetY)
+}
+
+private data class FitResult(val scale: Float, val offsetY: Float)
 
 private fun DrawScope.drawGrid(center: Offset, scale: Float, gridUnit: Float) {
     val step = gridUnit * scale
