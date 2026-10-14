@@ -22,14 +22,14 @@ plugins {
 
 android {
     namespace = "com.buge.calculator"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.buge.calculator"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 17
-        versionName = "1.3.12"
+        versionName = "1.3.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
